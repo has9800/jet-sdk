@@ -1,0 +1,31 @@
+# src/jet/engine_hf.py
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, set_seed
+from trl import SFTTrainer
+
+def train(opts, train_ds, eval_ds=None):
+    set_seed(opts.seed)
+    tok = AutoTokenizer.from_pretrained(opts.model, use_fast=True)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    args = TrainingArguments(
+        output_dir=opts.output_dir,
+        per_device_train_batch_size=opts.per_device_batch,
+        gradient_accumulation_steps=opts.grad_accum,
+        learning_rate=opts.lr,
+        num_train_epochs=opts.epochs,
+        bf16=False, fp16=False,  # CPU-safe defaults
+        logging_steps=50,
+        save_strategy="epoch",
+        evaluation_strategy="epoch" if eval_ds is not None else "no",
+        report_to=[],
+    )
+    model = AutoModelForCausalLM.from_pretrained(opts.model)
+    trainer = SFTTrainer(
+        model=model, tokenizer=tok,
+        train_dataset=train_ds, eval_dataset=eval_ds,
+        args=args, dataset_text_field="text", packing=False, max_seq_length=opts.max_seq
+    )
+    trainer.train()
+    trainer.save_model(opts.output_dir)
+    tok.save_pretrained(opts.output_dir)
+    return type("Job", (), {"model_dir": opts.output_dir})

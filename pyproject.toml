@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.1.0"
-description = "Jet: High-level fine-tuning SDK"
+version = "0.2.0"  # bump for re-release
+description = "Jet: High-level fine-tuning SDK (engine-isolated, Unsloth-friendly)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
+authors = [{name = "Your Team"}]
 dependencies = [
   "transformers>=4.42",
   "datasets>=2.18",
@@ -20,10 +21,12 @@ dependencies = [
 ]
 
 [project.scripts]
-jet = "jet.cli:app"  # optional CLI entrypoint
+jet = "jet.cli:app"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["jet", "jet.*"]
+namespaces = false

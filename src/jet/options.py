@@ -1,8 +1,10 @@
-# easyllm/options.py
+# src/jet/options.py
+from typing import Literal, Optional
 from pydantic import BaseModel
-from typing import Optional
 
 class TrainOptions(BaseModel):
+    engine: Literal["auto","unsloth","hf"] = "auto"
+    model: str
     epochs: int = 1
     max_seq: int = 2048
     lr: float = 2e-4
@@ -12,7 +14,4 @@ class TrainOptions(BaseModel):
     use_4bit: bool = True
     bf16: bool = True
     flash_attn2: bool = True
-    curriculum: str = "off"          # "off" | "length-baby" | "loss-onepass"
-    buckets: int = 3
     output_dir: str = "outputs/model"
-    mlflow_experiment: str = "easyllm-finetune"

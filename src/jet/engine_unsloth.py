@@ -35,7 +35,7 @@ def train(opts, train_ds, eval_ds=None):
         bf16=opts.bf16, fp16=not opts.bf16,
         logging_steps=50,
         save_strategy="epoch",
-        evaluation_strategy="epoch" if eval_ds is not None else "no",
+        eval_strategy="epoch" if eval_ds is not None else "no",
         report_to=[],
     )
     trainer = SFTTrainer(

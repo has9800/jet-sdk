@@ -16,7 +16,7 @@ def train(opts, train_ds, eval_ds=None):
         bf16=False, fp16=False,  # CPU-safe defaults
         logging_steps=50,
         save_strategy="epoch",
-        evaluation_strategy="epoch" if eval_ds is not None else "no",
+        eval_strategy="epoch" if eval_ds is not None else "no",
         report_to=[],
     )
     model = AutoModelForCausalLM.from_pretrained(opts.model)

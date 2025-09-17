@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.2.0"  # bump for re-release
+version = "0.3.0"  # bump for cli re-release
 description = "Jet: High-level fine-tuning SDK (engine-isolated, Unsloth-friendly)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [{name = "Your Team"}]
+optional-dependencies = { cli = ["typer>=0.12", "rich>=13", "questionary>=2.0"] }
 dependencies = [
   "transformers>=4.42",
   "datasets>=2.18",

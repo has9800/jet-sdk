@@ -1,6 +1,6 @@
 # tests/test_eval.py
 from unittest.mock import MagicMock
-from easyllm.eval import Evaluator
+from jet.eval import Evaluator
 
 def test_evaluator_offline(monkeypatch, tmp_path):
     # Fake tokenizer & model

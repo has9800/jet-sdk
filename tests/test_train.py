@@ -1,7 +1,7 @@
 # tests/test_train.py
 from unittest.mock import MagicMock
-from easyllm.train import FineTuner
-from easyllm.options import TrainOptions
+from jet.train import train_with_options
+from jet.options import TrainOptions
 
 def test_finetuner_offline(monkeypatch, tmp_path):
     # Mock Unsloth model + tokenizer

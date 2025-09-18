@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.4.5"
-description = "Jet: High-level fine-tuning SDK with engine isolation (HF/Unsloth) and fast CLI"
+version = "0.4.6"
+description = "Jet: High-level fine-tuning SDK with engine isolation (HF/Unsloth) and a clean CLI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -30,4 +30,4 @@ package-dir = {"" = "src"}
 packages = ["jet"]
 
 [tool.setuptools.package-data]
-jet = ["data/*.json"]  # curated lists bundled in wheel [web:1086][web:456]
+jet = ["data/*.json"]

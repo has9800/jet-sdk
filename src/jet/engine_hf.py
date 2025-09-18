@@ -1,5 +1,5 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
-from trl import SFTTrainer, SFTConfig  # modern TRL [web:347]
+from trl import SFTTrainer, SFTConfig
 
 def train(opts, train_ds, eval_ds=None):
     set_seed(opts.seed)
@@ -20,14 +20,14 @@ def train(opts, train_ds, eval_ds=None):
         save_strategy="epoch",
         eval_strategy="epoch" if eval_ds is not None else "no",
         report_to=[],
-        dataset_text_field=opts.text_field or "text",  # unified field [web:390]
+        dataset_text_field=opts.text_field or "text",
         packing=False,
         max_seq_length=opts.max_seq,
     )
 
     trainer = SFTTrainer(
         model=model,
-        processing_class=tok,  # tokenizer arg replaced in newer TRL [web:347]
+        processing_class=tok,
         train_dataset=train_ds,
         eval_dataset=eval_ds,
         args=sft,

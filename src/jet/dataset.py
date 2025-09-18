@@ -18,18 +18,16 @@ class DatasetBuilder:
         self.streaming, self.max_samples = streaming, max_samples
 
     def _detect(self, src: str):
-        # schemes: text:, csv:, json:, parquet:, hf:, or raw (assume HF id)
         if ":" in src and not _is_url(src):
             kind, path = src.split(":", 1)
             return kind, path
         if _is_url(src):
-            # infer kind by extension for remote files
             if src.endswith(".csv"): return "csv", src
             if src.endswith(".json") or src.endswith(".jsonl"): return "json", src
             if src.endswith(".parquet"): return "parquet", src
             if src.endswith(".txt"): return "text", src
             return "auto", src
-        return "hf", src  # org/name id [web:1083]
+        return "hf", src
 
     def load(self):
         kind, path = self._detect(self.source)
@@ -38,24 +36,23 @@ class DatasetBuilder:
             kwargs["streaming"] = True
 
         if kind == "json":
-            ds = load_dataset("json", data_files=path, **kwargs)  # local or remote [web:1083]
+            ds = load_dataset("json", data_files=path, **kwargs)
         elif kind == "csv":
-            ds = load_dataset("csv", data_files=path, **kwargs)   # local or remote [web:1083]
+            ds = load_dataset("csv", data_files=path, **kwargs)
         elif kind == "parquet":
-            ds = load_dataset("parquet", data_files=path, **kwargs)  # local or remote [web:1083]
+            ds = load_dataset("parquet", data_files=path, **kwargs)
         elif kind == "text":
-            ds = load_dataset("text", data_files=path, **kwargs)  # local or remote [web:1083]
+            ds = load_dataset("text", data_files=path, **kwargs)
         elif kind == "hf":
-            ds = load_dataset(path, **kwargs)  # HF dataset id [web:1083]
+            ds = load_dataset(path, **kwargs)
         else:
-            ds = load_dataset(path, **kwargs)  # fallback [web:1083]
+            ds = load_dataset(path, **kwargs)
 
         def to_text(ex):
             if self.input_field and self.target_field:
                 return {"text": f"{ex[self.input_field]}\n{ex[self.target_field]}"}
             if self.text_field:
                 return {"text": ex[self.text_field]}
-            # fallback: pick first string field
             for k, v in ex.items():
                 if isinstance(v, str):
                     return {"text": v}

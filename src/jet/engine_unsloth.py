@@ -1,4 +1,4 @@
-import unsloth  # must be first for patching [web:764]
+import unsloth
 from unsloth import FastLanguageModel
 import torch
 from transformers import set_seed
@@ -24,7 +24,7 @@ def train(opts, train_ds, eval_ds=None):
         bias="none",
         use_gradient_checkpointing="unsloth",
     )
-    if opts.flash_attn2 and hasattr(model.config, "attn_implementation"):
+    if hasattr(model.config, "attn_implementation"):
         model.config.attn_implementation = "flash_attention_2"
 
     sft = SFTConfig(

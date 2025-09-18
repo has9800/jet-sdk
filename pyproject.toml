@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.4.0"
+version = "0.4.1"
 description = "Jet: High-level fine-tuning SDK with engine isolation (HF/Unsloth) and fast CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,5 +31,5 @@ package-dir = {"" = "src"}  # keep
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["*"]            # was ["jet", "jet.*"]; relax to find your code reliably
+include = ["*", "jet", "jet.*"]            # was ["jet", "jet.*"]; relax to find your code reliably
 namespaces = false

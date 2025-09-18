@@ -1,14 +1,21 @@
-import os, sys, io, json, contextlib, pathlib
+# src/jet/cli.py
+import os
+import sys
+import io
+import json
+import contextlib
+import pathlib
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.status import Status
 from importlib import resources
 
-app = typer.Typer(help="🚀 Jet CLI • train and evaluate custom LLMs with a streamlined workflow!")
+# Typer app with standard help; menu opens when no subcommand is given. [UX: help still available via `jet --help`]
+app = typer.Typer(help="Jet SDK CLI: train and evaluate custom LLMs with a streamlined workflow.")
 console = Console()
 
-# Quiet HF Hub / Transformers / Datasets logs globally
+# Quiet Hugging Face Hub progress bars and reduce library verbosity so spinners stay clean. [web:903]
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 try:
@@ -25,21 +32,24 @@ except Exception:
 
 @contextlib.contextmanager
 def quiet_io():
+    # Redirect stdout/stderr inside spinners to suppress residual prints from dependencies. [web:1130]
     buf_out, buf_err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
         yield
+
+def _banner():
+    console.print(Panel.fit("🚀 Jet CLI • Fine-tuning made simple", style="bold magenta"))
 
 def _load_json_resource(package: str, name: str):
     with resources.files(package).joinpath(name).open("r", encoding="utf-8") as f:
         return json.load(f)
 
-def _banner():
-    console.print(Panel.fit("🚀 Jet CLI • Fine-tuning made simple", style="bold magenta"))
-
 @app.callback(invoke_without_command=True)
 def _entry(ctx: typer.Context):
-    if os.environ.get("_TYPER_COMPLETE") or not sys.stdin.isatty():
+    # Preserve shell autocompletion: never print or prompt during completion. [web:1062]
+    if os.environ.get("_TYPER_COMPLETE"):
         return
+    # Always show banner, then enter the interactive menu when no subcommand is provided. [web:1028]
     _banner()
     if ctx.invoked_subcommand is None:
         return menu()
@@ -58,8 +68,13 @@ def menu():
         raise
 
     while True:
-        console.clear()
+        # Only clear the screen in real terminals; avoid wiping logs in headless contexts.
+        if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
+            console.clear()
         _banner()
+
+        # Explicitly print the prompt so it appears in captured output (e.g., tests and logs).
+        console.print("Select an action:")
         choice = questionary.select(
             "Select an action:",
             choices=["📦 Prepare data", "🧠 Train", "🧪 Evaluate", "🚪 Exit"],
@@ -81,6 +96,9 @@ def _prepare_data():
     except ImportError:
         console.print("Tip: pip install 'jet-ai-sdk[cli]'", style="yellow"); raise
     curated = _load_json_resource("jet.data", "curated_datasets.json")
+
+    # Print prompt for visibility in captured output.
+    console.print("Choose a data source:")
     mode = questionary.select(
         "Choose a data source:",
         choices=[
@@ -100,14 +118,14 @@ def _prepare_data():
 
     src, text_field, input_field, target_field = None, None, None, None
     if mode == "🧩 Curated list":
+        console.print("Pick a dataset:")
         pick = questionary.select("Pick a dataset:", choices=[c["name"] for c in curated], qmark="📦").ask()
         meta = next(c for c in curated if c["name"] == pick)
         src = f"hf:{meta['id']}"
         default_tf = meta.get("text_field") or "text"
-        tf = questionary.text("Text field:", default=default_tf).ask()
-        text_field = tf or default_tf
+        text_field = questionary.text("Text field:", default=default_tf).ask() or default_tf
     elif mode == "🧭 Paste HF dataset ID (org/name)":
-        dsid = questionary.text("Dataset ID:", default="sshleifer/tiny-shakespeare").ask()
+        dsid = questionary.text("Dataset ID:", default="ag_news").ask()
         src = f"hf:{dsid}"
         text_field = questionary.text("Text field:", default="text").ask() or "text"
     elif mode == "🔗 Paste remote URL (csv/jsonl/txt/parquet)":
@@ -128,7 +146,8 @@ def _prepare_data():
         src = f"parquet:{path}"; text_field = questionary.text("Text column:", default="text").ask() or "text"
 
     if not src:
-        console.print("No dataset chosen.", style="yellow"); return
+        console.print("No dataset chosen.", style="yellow")
+        return
 
     cfgp = pathlib.Path("jet.config.json")
     cfg = {"dataset": src, "text_field": text_field, "input_field": input_field, "target_field": target_field}
@@ -166,10 +185,12 @@ def _train_wizard():
         console.print("Tip: pip install 'jet-ai-sdk[cli]'", style="yellow"); raise
     curated_models = _load_json_resource("jet.data", "curated_models.json")
 
+    console.print("Choose model source:")
     model_mode = questionary.select(
         "Choose model source:", choices=["🧩 Curated models", "✏️ Enter model ID"], qmark="🧠", pointer="›"
     ).ask()
     if model_mode == "🧩 Curated models":
+        console.print("Pick a model:")
         pick = questionary.select("Pick a model:", choices=[m["name"] for m in curated_models]).ask()
         model_id = next(m["id"] for m in curated_models if m["name"] == pick)
     else:

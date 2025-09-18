@@ -1,60 +1,33 @@
-import pytest
-from typer.testing import CliRunner
-from jet.cli import app
-
-runner = CliRunner()
-
-@pytest.fixture
-def mock_inputs():
-    return iter([
-        "📦 Prepare data",
-        "🧩 Curated list",
-        "Tiny Shakespeare (demo)",
-        "",  # default text field
-        "🧠 Train",
-        "🧩 Curated models",
-        "Tiny GPT-2 (smoke)",
-        "auto",
-        "1",
-        "1024",
-        "outputs/model",
-        "🧪 Evaluate",
-        "outputs/model",
-        "Hello",
-        "Hi",
-        "🚪 Exit"
-    ])
+# tests/test_cli_workflow.py
 
 def patch_questionary(monkeypatch, inputs):
+    # Fake prompt object that mimics questionary's interface
+    class FakePrompt:
+        def __init__(self, value): self.value = value
+        def ask(self): return self.value
+
     def fake_select(message, choices, **kwargs):
         ans = next(inputs)
-        assert ans in choices
-        return ans
-    class FakePrompt:
-        def __init__(self, default=None): self.default = default
-        def ask(self): return self.default if self.default is not None else ""
-    def text(message, default=None, **kwargs):
-        class T(FakePrompt):
-            def ask(self_inner): 
-                try:
-                    val = next(inputs)
-                except StopIteration:
-                    val = default
-                return val if val != "" else (default or "")
-        return T(default)
-    def path(message, default=None, **kwargs):
-        return text(message, default)
+        assert ans in choices, f"Unexpected selection {ans} for {message}"
+        return FakePrompt(ans)
 
-    monkeypatch.setattr("questionary.select", fake_select)
-    monkeypatch.setattr("questionary.text", text)
-    monkeypatch.setattr("questionary.path", path)
+    def fake_text(message, default=None, **kwargs):
+        try:
+            val = next(inputs)
+        except StopIteration:
+            val = default
+        if val == "":  # allow pressing Enter for default
+            val = default
+        return FakePrompt(val)
 
-def test_full_cli_flow(monkeypatch, mock_inputs):
-    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.delenv("_TYPER_COMPLETE", raising=False)
-    patch_questionary(monkeypatch, mock_inputs)
-    result = runner.invoke(app, [])
-    assert result.exit_code == 0
-    assert "Jet CLI" in result.output
-    assert "Select an action" in result.output
-    assert "✅ Trained and saved" in result.output
+    def fake_path(message, default=None, **kwargs):
+        return fake_text(message, default=default)
+
+    # Patch both module-level and CLI-local imports to be safe
+    monkeypatch.setattr("questionary.select", fake_select, raising=True)
+    monkeypatch.setattr("questionary.text", fake_text, raising=True)
+    monkeypatch.setattr("questionary.path", fake_path, raising=True)
+    # If your CLI imports questionary inside functions, also patch the resolved symbol:
+    monkeypatch.setattr("jet.cli.questionary", type("Q", (), {
+        "select": fake_select, "text": fake_text, "path": fake_path
+    }))

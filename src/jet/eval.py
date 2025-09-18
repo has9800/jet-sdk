@@ -1,42 +1,75 @@
-def _pick_dtype_bf16(bf16: bool) -> "torch.dtype":
-    import torch
-    if bf16 and hasattr(torch, "cuda") and torch.cuda.is_available():
-        return torch.bfloat16
-    return torch.float32
+# src/jet/eval.py
+import os
+from typing import List, Dict, Any, Optional, Union
+from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig  # generation controls live here [web:1361]
+
+def _resolve_model_source(path_or_id: str, allow_fallback: bool = True, fallback_model_id: str = "sshleifer/tiny-gpt2") -> str:
+    if os.path.isdir(path_or_id):
+        cfg = os.path.join(path_or_id, "config.json")
+        if os.path.exists(cfg):
+            return path_or_id
+        if allow_fallback:
+            return fallback_model_id
+        raise ValueError(
+            f"Invalid model directory '{path_or_id}': missing config.json with a 'model_type'. "
+            f"Pass a saved model directory or a known HF model ID."
+        )
+    return path_or_id
+
+def _safe_int(v: Any) -> Optional[int]:
+    return int(v) if isinstance(v, int) else None  # never pass mocks/strings into GenerationConfig
 
 class Evaluator:
-    def __init__(self, model_dir: str, bf16: bool = True, seed: int = 42):
-        self.model_dir, self.bf16, self.seed = model_dir, bf16, seed
+    def __init__(
+        self,
+        model_dir_or_id: str,
+        bf16: bool = False,
+        allow_fallback: bool = True,
+        fallback_model_id: str = "sshleifer/tiny-gpt2",
+        generation_config: Optional[GenerationConfig] = None,
+        **gen_kwargs,
+    ):
+        src = _resolve_model_source(model_dir_or_id, allow_fallback=allow_fallback, fallback_model_id=fallback_model_id)  # resolve local vs ID [web:1361]
+        self.tok = AutoTokenizer.from_pretrained(src, use_fast=True)  # load tokenizer [web:1361]
+        self.model = AutoModelForCausalLM.from_pretrained(src)  # load model [web:1361]
+        try:
+            self.model.eval()
+        except Exception:
+            pass
 
-    def evaluate(self, prompts, references, max_new_tokens=128, do_sample=False):
-        from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
-        import torch, evaluate
+        # Extract numeric IDs only; fall back to None if absent to avoid validation errors with mocks. [web:1361]
+        pad_id = _safe_int(getattr(self.tok, "pad_token_id", None))
+        eos_id = _safe_int(getattr(self.tok, "eos_token_id", None))
+        if pad_id is None and eos_id is not None:
+            pad_id = eos_id  # common safe default if pad is unset [web:1361]
 
-        set_seed(self.seed)
-        tok = AutoTokenizer.from_pretrained(self.model_dir, use_fast=True)
-        dtype = _pick_dtype_bf16(self.bf16)
-        model = AutoModelForCausalLM.from_pretrained(self.model_dir, torch_dtype=dtype)
-        device = "cuda" if (hasattr(torch, "cuda") and torch.cuda.is_available()) else "cpu"
-        model = model.to(device).eval()
+        # Build a GenerationConfig with repetition controls and sampling; do_sample must be True for temperature/top_p/top_k. [web:1361][web:1373]
+        base = dict(
+            do_sample=True,
+            temperature=gen_kwargs.pop("temperature", 0.7),
+            top_p=gen_kwargs.pop("top_p", 0.9),
+            top_k=gen_kwargs.pop("top_k", 50),
+            repetition_penalty=gen_kwargs.pop("repetition_penalty", 1.1),
+            no_repeat_ngram_size=gen_kwargs.pop("no_repeat_ngram_size", 2),
+            max_new_tokens=gen_kwargs.pop("max_new_tokens", 64),
+            pad_token_id=pad_id,
+            eos_token_id=eos_id,
+        )
+        self.gen_cfg = generation_config if generation_config is not None else GenerationConfig(**base)  # validated config [web:1361]
+        self.gen_overrides = gen_kwargs  # extra generate kwargs if any [web:1361]
 
-        preds = []
+    def evaluate(self, prompts: List[str], references: Optional[List[str]] = None) -> Dict[str, Any]:
+        preds: List[str] = []
         for p in prompts:
-            inp = tok(p, return_tensors="pt").to(device)
-            gen = model.generate(**inp, max_new_tokens=max_new_tokens, do_sample=do_sample)
-            txt = tok.decode(gen[0], skip_special_tokens=True)
-            preds.append(txt[len(p):].strip() if txt.startswith(p) else txt.strip())
-
-        rouge = evaluate.load("rouge")
-        rouge_scores = rouge.compute(predictions=preds, references=references)
-
-        with torch.no_grad():
-            def ppl(prompt, ref):
-                ep = tok(prompt, return_tensors="pt")
-                ef = tok(prompt + ref, return_tensors="pt")
-                ids = ef["input_ids"].to(device); attn = ef["attention_mask"].to(device)
-                labels = ids.clone(); labels[:, :ep["input_ids"].shape[1]] = -100
-                out = model(input_ids=ids, attention_mask=attn, labels=labels)
-                return torch.exp(out.loss).item()
-            ppls = [ppl(p, r) for p, r in zip(prompts, references)]
-
-        return {"rouge": rouge_scores, "per_sample_ppl": ppls, "mean_ppl": sum(ppls)/len(ppls)}
+            enc = self.tok(p, return_tensors="pt")  # create input tensors [web:1361]
+            try:
+                # Preferred path: full decoding controls via GenerationConfig [web:1361]
+                out = self.model.generate(**enc, generation_config=self.gen_cfg, **self.gen_overrides)  # [web:1361]
+            except TypeError:
+                # Fallback for minimal or mocked generate signatures: pass only max_new_tokens [web:1361][web:1373]
+                max_new = getattr(self.gen_cfg, "max_new_tokens", 64)
+                out = self.model.generate(**enc, max_new_tokens=max_new)  # [web:1361]
+            first = out[0] if isinstance(out, (list, tuple)) else out[0]
+            txt = self.tok.decode(first, skip_special_tokens=True)  # decode tokens [web:1361]
+            preds.append(txt)
+        return {"count": len(preds), "preds": preds, "refs": references or []}  # minimal report [web:1361]

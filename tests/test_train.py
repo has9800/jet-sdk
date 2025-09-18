@@ -1,44 +1,46 @@
-# tests/test_train.py
 from unittest.mock import MagicMock
-from jet.train import train_with_options
+import os
+from jet.train import train_with_options  # current API entrypoint [web:1216]
 from jet.options import TrainOptions
+from jet.dataset import DatasetBuilder
 
 def test_finetuner_offline(monkeypatch, tmp_path):
-    # Mock Unsloth model + tokenizer
+    # Create a tiny local dataset
+    p = tmp_path / "sample.txt"
+    p.write_text("hello world\nsecond sample\n")
+    ds = DatasetBuilder(f"text:{p}", split="train", text_field="text").load()
+
+    # Fake Unsloth loader/tokenizer
     fake_tok = MagicMock()
     fake_tok.pad_token = None
     fake_tok.eos_token = "<eos>"
+
     def fake_from_pretrained(model_name, **kw):
         fake_model = MagicMock()
         fake_model.config = MagicMock()
         return fake_model, fake_tok
-    monkeypatch.setattr("easyllm.train.FastLanguageModel.from_pretrained", fake_from_pretrained)
-    monkeypatch.setattr("easyllm.train.FastLanguageModel.get_peft_model", lambda m, **kw: m)
 
-    # Mock TRL SFTTrainer
-    calls = {"trained": False, "saved": False}
+    def fake_get_peft_model(model, **kw):
+        return model  # no-op for offline test
+
     class FakeTrainer:
-        def __init__(self, **kw): pass
-        def add_callback(self, cb): pass
-        def train(self): calls["trained"] = True
-        def save_model(self, out): 
-            (tmp_path / "model").mkdir(parents=True, exist_ok=True)
-            calls["saved"] = True
-    monkeypatch.setattr("easyllm.train.SFTTrainer", FakeTrainer)
+        def __init__(self, model=None, tokenizer=None, processing_class=None, train_dataset=None, eval_dataset=None, args=None):
+            self.args = args
+        def train(self):  # no-op training
+            pass
+        def save_model(self, outdir):
+            os.makedirs(outdir, exist_ok=True)
+            # create a sentinel file
+            with open(os.path.join(outdir, "adapter_config.json"), "w") as f:
+                f.write("{}")
 
-    # Mock MLflow
-    class FakeRun:
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
-    monkeypatch.setattr("easyllm.train.mlflow.set_experiment", lambda *_: None)
-    monkeypatch.setattr("easyllm.train.mlflow.start_run", lambda: FakeRun())
-    monkeypatch.setattr("easyllm.train.mlflow.log_params", lambda *_: None)
-    monkeypatch.setattr("easyllm.train.mlflow.log_artifacts", lambda *_: None)
+    # IMPORTANT: patch the actual module used by our code
+    monkeypatch.setattr("jet.engine_unsloth.FastLanguageModel.from_pretrained", fake_from_pretrained, raising=True)  # [web:393]
+    monkeypatch.setattr("jet.engine_unsloth.FastLanguageModel.get_peft_model", fake_get_peft_model, raising=True)    # [web:393]
+    monkeypatch.setattr("jet.engine_unsloth.SFTTrainer", FakeTrainer, raising=True)                                  # [web:1216]
 
-    # Minimal Dataset-like
-    fake_ds = type("D", (), {"__len__": lambda self: 2, "__iter__": lambda self: iter([{"text":"a"},{"text":"b"}])})()
-
-    opts = TrainOptions(output_dir=str(tmp_path), epochs=1, use_4bit=False, bf16=False, flash_attn2=False)
-    job = FineTuner("any/model", opts).train(fake_ds, eval_ds=None)
-    assert calls["trained"] and calls["saved"]
-    assert hasattr(job, "model_dir")
+    out = tmp_path / "model"
+    opts = TrainOptions(model="dummy", engine="unsloth", epochs=1, max_seq=64, output_dir=str(out))
+    job = train_with_options(opts, ds)
+    assert job.model_dir == str(out)
+    assert (out / "adapter_config.json").exists()

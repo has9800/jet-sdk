@@ -1,21 +1,30 @@
 from typing import Optional
 from datasets import load_dataset
+from datasets.exceptions import DatasetNotFoundError  # correct import
 
 def _is_url(path: str) -> bool:
     return path.startswith("http://") or path.startswith("https://")
 
 class DatasetBuilder:
     def __init__(
-        self, source: str, split: str = "train",
+        self,
+        source: str,
+        split: str = "train",
         text_field: Optional[str] = None,
         input_field: Optional[str] = None,
         target_field: Optional[str] = None,
         streaming: bool = False,
         max_samples: Optional[int] = None,
+        trust_remote_code: bool = True,  # ensure attribute exists with sensible default
     ):
-        self.source, self.split = source, split
-        self.text_field, self.input_field, self.target_field = text_field, input_field, target_field
-        self.streaming, self.max_samples = streaming, max_samples
+        self.source = source
+        self.split = split
+        self.text_field = text_field
+        self.input_field = input_field
+        self.target_field = target_field
+        self.streaming = streaming
+        self.max_samples = max_samples
+        self.trust_remote_code = trust_remote_code  # fix: define attribute
 
     def _detect(self, src: str):
         if ":" in src and not _is_url(src):
@@ -35,18 +44,25 @@ class DatasetBuilder:
         if self.streaming:
             kwargs["streaming"] = True
 
-        if kind == "json":
-            ds = load_dataset("json", data_files=path, **kwargs)
-        elif kind == "csv":
-            ds = load_dataset("csv", data_files=path, **kwargs)
-        elif kind == "parquet":
-            ds = load_dataset("parquet", data_files=path, **kwargs)
-        elif kind == "text":
-            ds = load_dataset("text", data_files=path, **kwargs)
-        elif kind == "hf":
-            ds = load_dataset(path, **kwargs)
-        else:
-            ds = load_dataset(path, **kwargs)
+        try:
+            if kind == "json":
+                ds = load_dataset("json", data_files=path, **kwargs)
+            elif kind == "csv":
+                ds = load_dataset("csv", data_files=path, **kwargs)
+            elif kind == "parquet":
+                ds = load_dataset("parquet", data_files=path, **kwargs)
+            elif kind == "text":
+                ds = load_dataset("text", data_files=path, **kwargs)
+            elif kind == "hf":
+                ds = load_dataset(path, trust_remote_code=self.trust_remote_code, **kwargs)  # no interactive prompt
+            else:
+                ds = load_dataset(path, **kwargs)
+        except DatasetNotFoundError:
+            # Optional fallback for legacy tiny-shakespeare IDs
+            if kind == "hf" and path in {"sshleifer/tiny-shakespeare", "tiny_shakespeare"}:
+                ds = load_dataset("karpathy/tiny_shakespeare", trust_remote_code=self.trust_remote_code, **kwargs)
+            else:
+                raise
 
         def to_text(ex):
             if self.input_field and self.target_field:

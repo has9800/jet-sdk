@@ -1,5 +1,5 @@
 [
-  {"name": "Alpaca (demo)", "id": "tatsu-lab/alpaca", "text_field": "text"},
+  {"name": "AG News (demo)", "id": "ag_news", "text_field": "text"},
   {"name": "Dolly 15k (demo)", "id": "databricks/databricks-dolly-15k", "text_field": "text"},
-  {"name": "Tiny Shakespeare (demo)", "id": "sshleifer/tiny-shakespeare", "text_field": "text"}
+  {"name": "Alpaca (demo)", "id": "tatsu-lab/alpaca", "text_field": "text"}
 ]

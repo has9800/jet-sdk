@@ -1,80 +1,142 @@
+# src/jet/cli.py
+import os
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress
+from rich.table import Table
+from rich import box
 
-app = typer.Typer(help="Jet SDK CLI: train and evaluate custom LLMs with a streamlined end-to-end workflow.")
+app = typer.Typer(help="Jet SDK CLI: train and evaluate custom LLMs with a streamlined workflow.")
 console = Console()
 
-@app.callback()
+def _quiet_hf():
+    # Hide HF Hub progress bars and quiet Transformers logs
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    try:
+        from transformers.utils import logging as tlog
+        tlog.set_verbosity_error()
+        tlog.disable_progress_bar()
+    except Exception:
+        pass
+
 def _banner():
     console.print(Panel.fit("🚀 Jet SDK • Fine-tuning made simple", style="bold magenta"))
+
+@app.callback()
+def _entry():
+    _quiet_hf()
+    _banner()
 
 @app.command(help="Show version.")
 def version():
     import jet
     console.print(f"Jet SDK {jet.__version__}", style="green")
 
-@app.command(help="Interactive setup (project name, model, dataset, engine).")
-def init():
+@app.command(help="Interactive Menu (scaffold, train, eval).")
+def menu():
+    _quiet_hf()
     try:
-        import questionary  # lazy import
-    except Exception:
+        import questionary  # lazy import; install extra: pip install 'jet-ai-sdk[cli]'
+    except ImportError:
         console.print("Tip: install CLI extras for interactive prompts: pip install 'jet-ai-sdk[cli]'", style="yellow")
         raise
-    answers = questionary.prompt([
-        {"type": "text", "name": "project", "message": "Project name:"},
-        {"type": "text", "name": "model", "message": "Base model (e.g., sshleifer/tiny-gpt2):"},
-        {"type": "text", "name": "data", "message": "Dataset (e.g., text:./data.txt or hf_id):"},
-        {"type": "select", "name": "engine", "message": "Engine:", "choices": ["auto","unsloth","hf"], "default": "auto"},
-    ])
-    console.print(f"Creating project [cyan]{answers['project']}[/cyan]…")
-    console.print("✅ Done.", style="green")
 
-@app.command(help="Train a model (lazy imports inside handler).")
-def train(
-    model: str = typer.Option(..., help="Base model id"),
-    data: str = typer.Option(..., help="Dataset source (e.g., text:path, csv:path, parquet:path, or HF id)"),
-    engine: str = typer.Option("auto", help="Engine: auto|unsloth|hf"),
-    epochs: int = typer.Option(1, help="Epochs"),
-    max_seq: int = typer.Option(2048, help="Max sequence length"),
-    output_dir: str = typer.Option("outputs/model", help="Output dir"),
-    per_device_batch: int = typer.Option(1, help="Per-device batch size"),
-    grad_accum: int = typer.Option(16, help="Gradient accumulation steps"),
-    lr: float = typer.Option(2e-4, help="Learning rate"),
-):
-    from jet.options import TrainOptions  # lazy
-    from jet.dataset import DatasetBuilder  # lazy
-    from jet.train import train_with_options  # lazy
+    console.clear()
+    _banner()
+    console.print("Welcome! Choose what to do next:", style="bold cyan")
 
-    with Progress() as prog:
-        task = prog.add_task("Preparing…", total=3)
+    while True:
+        choice = questionary.select(
+            "Select from:",
+            choices=[
+                "🧱 Init project",
+                "📦 Prepare data",
+                "🧠 Train",
+                "🧪 Evaluate",
+                "🚪 Exit",
+            ],
+            qmark="✨",
+            pointer="›",
+            instruction="Use ↑/↓ and Enter",
+        ).ask()
+
+        if choice == "🚪 Exit":
+            console.print("Goodbye! 👋", style="bold green")
+            break
+
+        if choice == "🧱 Init project":
+            _init_wizard()
+        elif choice == "📦 Prepare data":
+            _prepare_data()
+        elif choice == "🧠 Train":
+            _train_wizard()
+        elif choice == "🧪 Evaluate":
+            _eval_wizard()
+
+def _init_wizard():
+    import questionary
+    name = questionary.text("Project name:").ask()
+    model = questionary.text("Base model (e.g., sshleifer/tiny-gpt2):").ask()
+    data = questionary.text("Dataset (e.g., text:./data.txt or hf_id):").ask()
+    engine = questionary.select("Engine:", choices=["auto","unsloth","hf"], default="auto").ask()
+    table = Table(title="Init Summary", box=box.SIMPLE)
+    table.add_column("Field"); table.add_column("Value")
+    for k,v in [("Project", name), ("Model", model), ("Dataset", data), ("Engine", engine)]:
+        table.add_row(k, v)
+    console.print(table)
+    console.print("✅ Project initialized (scaffold your files as needed).", style="green")
+
+def _prepare_data():
+    from rich.status import Status
+    with Status("Preparing dataset …", spinner="dots") as status:
+        try:
+            from jet.dataset import DatasetBuilder
+            # Example: small text sample; in real use, prompt for path or HF ID
+            ds = DatasetBuilder("text:./sample.txt", split="train").load()
+            status.update("Dataset ready!")
+        except Exception as e:
+            console.print(f"❌ Data preparation failed: {e}", style="bold red")
+            return
+    console.print("📦 Dataset prepared.", style="green")
+
+def _train_wizard():
+    import questionary
+    model = questionary.text("Base model (e.g., sshleifer/tiny-gpt2):").ask()
+    data = questionary.text("Dataset (e.g., text:./data.txt or hf_id):").ask()
+    engine = questionary.select("Engine:", choices=["auto","unsloth","hf"], default="auto").ask()
+    epochs = int(questionary.text("Epochs:", default="1").ask() or "1")
+    max_seq = int(questionary.text("Max seq length:", default="1024").ask() or "1024")
+    out = questionary.text("Output dir:", default="outputs/model").ask()
+
+    from rich.status import Status
+    with Status("Setting up training …", spinner="dots"):
+        from jet.options import TrainOptions
+        from jet.dataset import DatasetBuilder
+        from jet.train import train_with_options
         ds = DatasetBuilder(data, split="train").load()
-        prog.update(task, advance=1)
-        opts = TrainOptions(
-            model=model, engine=engine, epochs=epochs, max_seq=max_seq,
-            output_dir=output_dir, per_device_batch=per_device_batch,
-            grad_accum=grad_accum, lr=lr,
-        )
-        prog.update(task, advance=1)
+        opts = TrainOptions(model=model, engine=engine, epochs=epochs, max_seq=max_seq, output_dir=out)
+
+    with Status("Downloading model/tokenizer …", spinner="line"):
+        pass  # hidden by HF env + quiet logging
+
+    with Status("Training … this may take a while", spinner="earth"):
         job = train_with_options(opts, ds)
-        prog.update(task, advance=1)
+
     console.print(f"✅ Trained and saved to [green]{job.model_dir}[/green]")
 
-@app.command(help="Evaluate a trained model (lazy import of evaluation stack).")
-def eval(
-    model_dir: str = typer.Option(..., help="Path to saved model"),
-    prompts: str = typer.Option(..., help="Comma-separated prompts"),
-    refs: str = typer.Option(..., help="Comma-separated references"),
-):
-    from jet.eval import Evaluator  # lazy
-    P = [p.strip() for p in prompts.split(",")]
-    R = [r.strip() for r in refs.split(",")]
-    with Progress() as prog:
-        task = prog.add_task("Evaluating…", total=1)
-        report = Evaluator(model_dir, bf16=False).evaluate(P, R)
-        prog.update(task, advance=1)
-    console.print(report)
+def _eval_wizard():
+    import questionary
+    model_dir = questionary.text("Path to saved model:", default="outputs/model").ask()
+    prompts = questionary.text("Prompts (comma-separated):", default="Hello").ask()
+    refs = questionary.text("References (comma-separated):", default="Hi").ask()
+    from rich.status import Status
+    with Status("Evaluating …", spinner="dots"):
+        from jet.eval import Evaluator
+        P = [p.strip() for p in prompts.split(",")]
+        R = [r.strip() for r in refs.split(",")]
+        rep = Evaluator(model_dir, bf16=False).evaluate(P, R)
+    console.print(rep)
 
-def app():
-    return typer.run(_banner)
+def main():
+    app()

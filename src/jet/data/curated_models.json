@@ -1,0 +1,5 @@
+[
+  {"name": "Tiny GPT‑2 (smoke)", "id": "sshleifer/tiny-gpt2"},
+  {"name": "Mistral 7B Instruct", "id": "mistralai/Mistral-7B-Instruct-v0.3"},
+  {"name": "Qwen2.5 7B Instruct", "id": "Qwen/Qwen2.5-7B-Instruct"}
+]

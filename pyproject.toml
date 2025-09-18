@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.4.4"
+version = "0.4.5"
 description = "Jet: High-level fine-tuning SDK with engine isolation (HF/Unsloth) and fast CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,13 +19,15 @@ dependencies = [
   "bitsandbytes>=0.43.0",
   "mlflow>=2.12",
 ]
+[project.optional-dependencies]
+cli = ["typer>=0.12", "rich>=13", "questionary>=2.0"]
 
 [project.scripts]
-jet = "jet.cli:main" # call a function; don't risk shadowing a Typer app object [web:520][web:958]
-
-[project.optional-dependencies]
-cli = ["typer>=0.12", "rich>=13", "questionary>=2.0"]  # PEP 621 standard form [web:948][web:952]
+jet = "jet.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["jet"] 
+packages = ["jet"]
+
+[tool.setuptools.package-data]
+jet = ["data/*.json"]  # curated lists bundled in wheel [web:1086][web:456]

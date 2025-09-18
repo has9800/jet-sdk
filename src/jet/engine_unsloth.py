@@ -1,6 +1,5 @@
-import unsloth  # MUST be first for Unsloth patching
+import unsloth  # must be first for patching [web:764]
 from unsloth import FastLanguageModel
-
 import torch
 from transformers import set_seed
 from trl import SFTTrainer, SFTConfig
@@ -25,8 +24,6 @@ def train(opts, train_ds, eval_ds=None):
         bias="none",
         use_gradient_checkpointing="unsloth",
     )
-
-    # Optional acceleration toggle
     if opts.flash_attn2 and hasattr(model.config, "attn_implementation"):
         model.config.attn_implementation = "flash_attention_2"
 
@@ -36,13 +33,12 @@ def train(opts, train_ds, eval_ds=None):
         gradient_accumulation_steps=opts.grad_accum,
         learning_rate=opts.lr,
         num_train_epochs=opts.epochs,
-        bf16=opts.bf16,
-        fp16=not opts.bf16,
+        bf16=opts.bf16, fp16=not opts.bf16,
         logging_steps=50,
         save_strategy="epoch",
         eval_strategy="epoch" if eval_ds is not None else "no",
         report_to=[],
-        dataset_text_field="text",
+        dataset_text_field=opts.text_field or "text",
         packing=False,
         max_seq_length=opts.max_seq,
     )

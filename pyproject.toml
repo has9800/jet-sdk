@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jet-ai-sdk"
-version = "0.4.1"
+version = "0.4.4"
 description = "Jet: High-level fine-tuning SDK with engine isolation (HF/Unsloth) and fast CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,9 +27,5 @@ jet = "jet.cli:main" # call a function; don't risk shadowing a Typer app object 
 cli = ["typer>=0.12", "rich>=13", "questionary>=2.0"]  # PEP 621 standard form [web:948][web:952]
 
 [tool.setuptools]
-package-dir = {"" = "src"}  # keep
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["*", "jet", "jet.*"]            # was ["jet", "jet.*"]; relax to find your code reliably
-namespaces = false
+package-dir = {"" = "src"}
+packages = ["jet"] 

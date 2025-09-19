@@ -1,5 +1,5 @@
-from importlib.metadata import version, PackageNotFoundError
-try:
-    __version__ = version("jet-ai-sdk")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
+# src/jet/__init__.py
+from .eval import Evaluator
+from .metrics import compute_rouge, compute_perplexity
+from .merge import merge_lora
+__all__ = ["Evaluator", "compute_rouge", "compute_perplexity", "merge_lora"]

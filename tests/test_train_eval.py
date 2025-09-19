@@ -3,7 +3,7 @@ from jet.dataset import DatasetBuilder
 from jet.train import train_with_options
 
 def test_train_smoke_cpu(tmp_path):
-    dsb = DatasetBuilder("hf:sshleifer/tiny-shakespeare", split="train", text_field="text")
+    dsb = DatasetBuilder("hf:karpathy/tiny_shakespeare", split="train", text_field="text")
     ds = dsb.load()
     opts = TrainOptions(
         model="sshleifer/tiny-gpt2",

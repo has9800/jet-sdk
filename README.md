@@ -1,3 +1,5 @@
+<img src="/Jet-sdk.png" alt="Jet SDK logo" style="width: 100%; height: 100%" />
+
 # Jet AI
 
 The end-to-end pipeline to build, train, and fine-tune custom LLM models you own 🚀
@@ -35,3 +37,23 @@ OR
 - vLLM deployment
 - HuggingFace open-weight and open-source models and fine-tuning data
 - Auto-enable multi-gpu processess by detecting environment or run on single gpu
+
+
+
+### Commands
+
+```bash
+pip -m build
+```
+
+```bash
+pip -m build
+```
+
+```bash
+pip -m build
+```
+
+```bash
+pip -m build
+```
